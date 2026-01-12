@@ -1,0 +1,48 @@
+__pycache__/
+*.pyc
+.venv/
+.env
+.env.*
+
+.DS_Store
+.vscode/
+.idea/
+.ipynb_checkpoints/
+
+data/indexes/faiss.index
+data/indexes/chunks.jsonl# =========================
+# Python
+# =========================
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# =========================
+# Environment / Secrets
+# =========================
+.env
+.env.*
+
+# =========================
+# OS / Editor
+# =========================
+.DS_Store
+.vscode/
+.idea/
+
+# =========================
+# Generated artifacts
+# =========================
+data/indexes/faiss.index
+data/indexes/chunks.jsonl
+
+# =========================
+# Jupyter
+# =========================
+.ipynb_checkpoints/
