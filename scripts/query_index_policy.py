@@ -12,6 +12,62 @@ import numpy as np
 import faiss
 from sentence_transformers import SentenceTransformer
 
+def run_policy_query(query: str, top_k: int = 5, candidates: int = 20) -> list[dict]:
+    """
+    Programmatic API for policy-aware retrieval.
+    Used by both CLI (main) and evaluation harness.
+    """
+
+    if not FAISS_INDEX_PATH.exists():
+        raise FileNotFoundError(f"Missing FAISS index at {FAISS_INDEX_PATH}. Run scripts/build_index.py first.")
+    if not CHUNKS_PATH.exists():
+        raise FileNotFoundError(f"Missing chunks.jsonl at {CHUNKS_PATH}. Run scripts/build_index.py first.")
+
+    index = faiss.read_index(str(FAISS_INDEX_PATH))
+    chunks = load_chunks(CHUNKS_PATH)
+
+    model = SentenceTransformer(EMBEDDING_MODEL_NAME)
+    qvec = embed_query(model, query)
+
+    D, I = index.search(qvec, candidates)
+
+    retrieved: List[Retrieved] = []
+
+    for sim, idx in zip(D[0].tolist(), I[0].tolist()):
+        if idx < 0 or idx >= len(chunks):
+            continue
+
+        item = Retrieved(idx=idx, sim=float(sim), chunk=chunks[idx])
+        ok, _reason = hard_filter(item, allow_draft=False)
+        if ok:
+            retrieved.append(item)
+
+    rescored_all = policy_rerank(query, retrieved)
+
+    intent = intent_from_query(query)
+    quotas = type_quota_for_intent(intent)
+    selected = select_with_dedup_and_quotas(rescored_all, top_k=top_k, quotas=quotas)
+
+    results: list[dict] = []
+    for final_score, it, reasons in selected:
+        rec = it.chunk
+        meta = rec.get("meta", {})
+
+        results.append(
+            {
+                "doc_id": rec.get("doc_id", meta.get("doc_id", "")),
+                "doc_type": rec.get("doc_type", meta.get("doc_type", "")),
+                "title": meta.get("title", ""),
+                "last_updated": meta.get("last_updated", meta.get("date", "")),
+                "score_final": float(final_score),
+                "score_sim": float(it.sim),
+                "reasons": reasons,
+                "preview": rec.get("text", ""),
+            }
+        )
+
+    return results
+
 INDEX_DIR = Path("data/indexes")
 FAISS_INDEX_PATH = INDEX_DIR / "faiss.index"
 CHUNKS_PATH = INDEX_DIR / "chunks.jsonl"
@@ -244,66 +300,28 @@ def main() -> None:
     top_k = int(sys.argv[2]) if len(sys.argv) >= 3 else 5
     candidates = int(sys.argv[3]) if len(sys.argv) >= 4 else 20
 
-    if not FAISS_INDEX_PATH.exists():
-        raise FileNotFoundError(f"Missing FAISS index at {FAISS_INDEX_PATH}. Run scripts/build_index.py first.")
-    if not CHUNKS_PATH.exists():
-        raise FileNotFoundError(f"Missing chunks.jsonl at {CHUNKS_PATH}. Run scripts/build_index.py first.")
-
-    index = faiss.read_index(str(FAISS_INDEX_PATH))
-    chunks = load_chunks(CHUNKS_PATH)
-
-    model = SentenceTransformer(EMBEDDING_MODEL_NAME)
-    qvec = embed_query(model, query)
-
-    D, I = index.search(qvec, candidates)
-
-    retrieved: List[Retrieved] = []
-    filtered_out: List[str] = []
-
-    for sim, idx in zip(D[0].tolist(), I[0].tolist()):
-        if idx < 0 or idx >= len(chunks):
-            continue
-        item = Retrieved(idx=idx, sim=float(sim), chunk=chunks[idx])
-
-        ok, reason = hard_filter(item, allow_draft=False)
-        if not ok:
-            filtered_out.append(reason)
-            continue
-
-        retrieved.append(item)
-
-    rescored_all = policy_rerank(query, retrieved)
-
-    intent = intent_from_query(query)
-    quotas = type_quota_for_intent(intent)
-    rescored = select_with_dedup_and_quotas(rescored_all, top_k=top_k, quotas=quotas)
+    results = run_policy_query(query, top_k=top_k, candidates=candidates)
 
     print("\n🔎 Query:", query)
-    print(f"📌 Top {top_k} results (policy reranked + dedup + quotas):")
-    print("🧩 Quotas:", quotas)
-    if filtered_out:
-        print(f"🧹 Hard filtered: {len(filtered_out)} items (deprecated/draft)\n")
-    else:
-        print()
+    print(f"📌 Top {top_k} results (policy reranked + dedup + quotas):\n")
 
-    for rank, (final_score, it, reasons) in enumerate(rescored, start=1):
-        rec = it.chunk
-        meta = rec.get("meta", {})
-        doc_id = rec.get("doc_id", meta.get("doc_id", ""))
-        doc_type = rec.get("doc_type", meta.get("doc_type", ""))
-        title = meta.get("title", "")
-        last_updated = meta.get("last_updated", meta.get("date", ""))
+    for rank, r in enumerate(results, start=1):
+        print(
+            f"{rank}. final={r['score_final']:.4f} | "
+            f"sim={r['score_sim']:.4f} | "
+            f"{r['doc_id']} ({r['doc_type']})"
+        )
 
-        preview = rec.get("text", "").replace("\n", " ")
+        if r["last_updated"]:
+            print(f"   last_updated: {r['last_updated']}")
+        if r["title"]:
+            print(f"   title: {r['title']}")
+
+        preview = r["preview"].replace("\n", " ")
         if len(preview) > 220:
             preview = preview[:220] + "..."
 
-        print(f"{rank}. final={final_score:.4f} | sim={it.sim:.4f} | {doc_id} ({doc_type})")
-        if last_updated:
-            print(f"   last_updated: {last_updated}")
-        if title:
-            print(f"   title: {title}")
-        print(f"   reasons: {', '.join(reasons)}")
+        print(f"   reasons: {', '.join(r['reasons'])}")
         print(f"   preview: {preview}\n")
 
 

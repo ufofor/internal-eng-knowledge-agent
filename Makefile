@@ -38,3 +38,6 @@ query:
 query_policy:
 	@echo "🔎 Querying with policy rerank + dedup + quotas..."
 	$(PYTHON) scripts/query_index_policy.py "$(Q)" $(K) $(C)
+eval:
+	@echo "🧪 Running retrieval evaluation..."
+	$(PYTHON) scripts/run_eval.py

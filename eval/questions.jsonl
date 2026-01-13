@@ -1,0 +1,10 @@
+"cat > eval/questions.jsonl <<'EOF'
+{\"id\":\"Q-001\",\"query\":\"What’s our standard for service-to-service authentication?\",\"expected_primary_doc\":\"STD-02\",\"expected_doc_type\":\"STD\"}
+{\"id\":\"Q-002\",\"query\":\"Why did we centralize authentication using OAuth2/OIDC?\",\"expected_primary_doc\":\"ADR-009\",\"expected_doc_type\":\"ADR\"}
+{\"id\":\"Q-003\",\"query\":\"Which runbook applies to API latency spikes and what should on-call check first?\",\"expected_primary_doc\":\"RBK-03\",\"expected_doc_type\":\"RBK\"}
+{\"id\":\"Q-004\",\"query\":\"What did we learn from the billing retry storm incident?\",\"expected_primary_doc\":\"PM-2024-09\",\"expected_doc_type\":\"PM\"}
+{\"id\":\"Q-005\",\"query\":\"What’s our standard for logging and tracing fields?\",\"expected_primary_doc\":\"STD-03\",\"expected_doc_type\":\"STD\"}
+EOF"{"id":"Q-001","query":"What’s our standard for service-to-service authentication?","expected_primary_doc":"STD-02","expected_doc_type":"STD"}
+{"id":"Q-002","query":"Which runbook applies to login latency spikes?","expected_primary_doc":"RBK-03","expected_doc_type":"RBK"}
+{"id":"Q-003","query":"Why did we choose OAuth2 for internal auth?","expected_primary_doc":"ADR-009","expected_doc_type":"ADR"}
+{"id":"Q-004","query":"What incident caused retry storms in billing?","expected_primary_doc":"PM-2024-09","expected_doc_type":"PM"}
