@@ -1,0 +1,132 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Internal Engineering Knowledge Agent</title>
+  <style>
+    body { font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; margin: 40px; max-width: 980px; }
+    h1 { margin-bottom: 6px; }
+    .muted { color: #666; margin-top: 0; }
+    .row { display: flex; gap: 10px; margin: 18px 0 10px; }
+    input[type="text"] { flex: 1; padding: 10px; font-size: 16px; }
+    button { padding: 10px 14px; font-size: 16px; cursor: pointer; }
+    .controls { display: flex; gap: 10px; margin: 10px 0 18px; }
+    .controls label { display: flex; gap: 6px; align-items: center; }
+    .controls input { width: 70px; padding: 6px; }
+    .card { border: 1px solid #ddd; border-radius: 12px; padding: 14px; margin: 10px 0; }
+    .meta { display: flex; flex-wrap: wrap; gap: 10px; color: #333; margin-bottom: 8px; }
+    .pill { background: #f2f2f2; padding: 4px 8px; border-radius: 999px; font-size: 13px; }
+    .title { font-weight: 650; margin: 6px 0 10px; }
+    .preview { color: #333; }
+    .reasons { color: #555; font-size: 14px; margin-top: 10px; }
+    .error { color: #b00020; margin-top: 10px; }
+    .loading { color: #555; margin-top: 10px; }
+  </style>
+</head>
+<body>
+  <h1>Internal Engineering Knowledge Agent</h1>
+  <p class="muted">Local search over ADRs, standards, runbooks, postmortems — with policy-aware ranking and citations.</p>
+
+  <div class="row">
+    <input id="q" type="text" placeholder='Try: What’s our standard for service-to-service authentication?' />
+    <button id="btn">Search</button>
+  </div>
+
+  <div class="controls">
+    <label>top_k <input id="top_k" type="number" min="1" max="10" value="5" /></label>
+    <label>candidates <input id="candidates" type="number" min="5" max="200" value="30" /></label>
+  </div>
+
+  <div id="status"></div>
+  <div id="results"></div>
+
+  <script>
+    const $q = document.getElementById("q");
+    const $btn = document.getElementById("btn");
+    const $status = document.getElementById("status");
+    const $results = document.getElementById("results");
+    const $topK = document.getElementById("top_k");
+    const $cand = document.getElementById("candidates");
+
+    function setStatus(html, cls="") {
+      $status.className = cls;
+      $status.innerHTML = html || "";
+    }
+
+    function escapeHtml(s) {
+      return String(s).replace(/[&<>"']/g, (m) => ({
+        "&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#039;"
+      }[m]));
+    }
+
+    function renderResults(items) {
+      if (!items || items.length === 0) {
+        $results.innerHTML = `<p class="muted">No results found.</p>`;
+        return;
+      }
+
+      $results.innerHTML = items.map((r, idx) => {
+        const reasons = (r.reasons || []).map(escapeHtml).join(", ");
+        const preview = escapeHtml(r.preview || "");
+        const title = escapeHtml(r.title || "");
+        const docId = escapeHtml(r.doc_id || "");
+        const docType = escapeHtml(r.doc_type || "");
+        const last = escapeHtml(r.last_updated || "");
+        const scoreF = (r.score_final ?? 0).toFixed(4);
+        const scoreS = (r.score_sim ?? 0).toFixed(4);
+
+        return `
+          <div class="card">
+            <div class="meta">
+              <span class="pill">#${idx+1}</span>
+              <span class="pill">${docId}</span>
+              <span class="pill">${docType}</span>
+              ${last ? `<span class="pill">updated: ${last}</span>` : ``}
+              <span class="pill">final: ${scoreF}</span>
+              <span class="pill">sim: ${scoreS}</span>
+            </div>
+            ${title ? `<div class="title">${title}</div>` : ``}
+            <div class="preview">${preview}</div>
+            ${reasons ? `<div class="reasons"><b>reasons:</b> ${reasons}</div>` : ``}
+          </div>
+        `;
+      }).join("");
+    }
+
+    async function runQuery() {
+      const q = $q.value.trim();
+      if (!q) {
+        setStatus("Please enter a question.", "error");
+        return;
+      }
+
+      const top_k = parseInt($topK.value || "5", 10);
+      const candidates = parseInt($cand.value || "30", 10);
+
+      setStatus("Searching…", "loading");
+      $results.innerHTML = "";
+
+      const url = `/query?q=${encodeURIComponent(q)}&top_k=${top_k}&candidates=${candidates}`;
+
+      try {
+        const res = await fetch(url);
+        if (!res.ok) {
+          const txt = await res.text();
+          throw new Error(`HTTP ${res.status}: ${txt}`);
+        }
+        const data = await res.json();
+        setStatus("");
+        renderResults(data.results);
+      } catch (err) {
+        setStatus(`Error: ${escapeHtml(err.message)}`, "error");
+      }
+    }
+
+    $btn.addEventListener("click", runQuery);
+    $q.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") runQuery();
+    });
+  </script>
+</body>
+</html>

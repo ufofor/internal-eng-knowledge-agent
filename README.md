@@ -43,3 +43,8 @@ flowchart TD
   D --> K[Doc-type quotas<br/>STD / ADR / RBK / PM / TMP]
   K --> O[Top-K results<br/>with citations]
   O --> U
+  
+  ## Run locally (API + UI)
+
+```bash
+uvicorn app.main:app --reload --host 127.0.0.1 --port 8001
